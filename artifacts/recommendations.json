@@ -1,0 +1,96 @@
+{
+  "recommendations": [
+    {
+      "vertex_id": 6,
+      "rank": 1,
+      "score": 63.38888888888889,
+      "score_breakdown": {
+        "vertex_id": 6,
+        "total_score": 63.38888888888889,
+        "production_score": 36.111111111111114,
+        "balance_score": 20.0,
+        "road_score": 11.555555555555555,
+        "dev_score": 7.5,
+        "robber_penalty": 5.0,
+        "blocking_score": 0.0,
+        "harbor_score": 25.0
+      },
+      "justification": "Strong production: sheep (13.9%), brick (11.1%), wheat (11.1%); Excellent resource diversity; High-probability numbers: 8"
+    },
+    {
+      "vertex_id": 14,
+      "rank": 2,
+      "score": 58.19444444444445,
+      "score_breakdown": {
+        "vertex_id": 14,
+        "total_score": 58.19444444444445,
+        "production_score": 36.111111111111114,
+        "balance_score": 10.0,
+        "road_score": 10.166666666666666,
+        "dev_score": 8.333333333333334,
+        "robber_penalty": 10.0,
+        "blocking_score": 0.0,
+        "harbor_score": 25.0
+      },
+      "justification": "Strong production: wood (8.3%), sheep (27.8%); Good resource diversity; High-probability numbers: 6, 6"
+    },
+    {
+      "vertex_id": 7,
+      "rank": 3,
+      "score": 56.05555555555556,
+      "score_breakdown": {
+        "vertex_id": 7,
+        "total_score": 56.05555555555556,
+        "production_score": 30.555555555555554,
+        "balance_score": 20.0,
+        "road_score": 6.0,
+        "dev_score": 9.166666666666668,
+        "robber_penalty": 5.0,
+        "blocking_score": 0.0,
+        "harbor_score": 25.0
+      },
+      "justification": "Strong production: sheep (13.9%), wheat (11.1%); Excellent resource diversity; High-probability numbers: 8"
+    },
+    {
+      "vertex_id": 29,
+      "rank": 4,
+      "score": 52.69444444444444,
+      "score_breakdown": {
+        "vertex_id": 29,
+        "total_score": 52.69444444444444,
+        "production_score": 33.33333333333333,
+        "balance_score": 10.0,
+        "road_score": 15.722222222222221,
+        "dev_score": 4.166666666666667,
+        "robber_penalty": 5.0,
+        "blocking_score": 0.0,
+        "harbor_score": 15.0
+      },
+      "justification": "Strong production: brick (19.4%), sheep (13.9%); Good resource diversity; High-probability numbers: 8"
+    },
+    {
+      "vertex_id": 10,
+      "rank": 5,
+      "score": 51.666666666666664,
+      "score_breakdown": {
+        "vertex_id": 10,
+        "total_score": 51.666666666666664,
+        "production_score": 38.888888888888886,
+        "balance_score": 10.0,
+        "road_score": 11.555555555555555,
+        "dev_score": 8.333333333333334,
+        "robber_penalty": 10.0,
+        "blocking_score": 0.0,
+        "harbor_score": 0.0
+      },
+      "justification": "Strong production: sheep (27.8%), brick (11.1%); Good resource diversity; High-probability numbers: 8, 8"
+    }
+  ],
+  "metadata": {
+    "strategy": "balanced",
+    "player_id": 0,
+    "top_k": 5,
+    "board_file": "artifacts/board.json",
+    "state_file": "artifacts/example_state.json"
+  }
+}

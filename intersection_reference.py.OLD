@@ -1,0 +1,224 @@
+"""
+Intersection Reference Generator
+===============================
+
+Creates a visual reference showing intersection numbers on the classic Catan board
+to help players identify where to place settlements.
+"""
+
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+import numpy as np
+import math
+from catan_board import CatanBoard, ResourceType
+import os
+
+class IntersectionReference:
+    """Generate visual reference for intersection numbers on classic Catan board."""
+    
+    def __init__(self):
+        # Use the standard CatanBoard to get correct resource distribution
+        self.board = CatanBoard(4)
+        self.board.create_standard_board()
+        
+        # Create harbor positions manually for display
+        self.harbor_positions = self._create_harbor_positions()
+        
+    def _create_harbor_positions(self):
+        """Create proper harbor positions around the hexagonal board perimeter."""
+        # Harbor positions around the classic hexagonal board shape
+        harbors = [
+            (-0.5, 3.8, "3:1"),     # Top left
+            (1.5, 3.8, "2:1"),      # Top center
+            (3.5, 3.8, "3:1"),      # Top right
+            (5.0, 1.5, "2:1"),      # Right top
+            (5.0, -1.5, "3:1"),     # Right bottom
+            (3.5, -3.8, "2:1"),     # Bottom right
+            (1.5, -3.8, "3:1"),     # Bottom center
+            (-0.5, -3.8, "2:1"),    # Bottom left
+            (-2.0, -1.5, "3:1"),    # Left bottom
+        ]
+        return harbors
+    
+    def _draw_harbors(self, ax):
+        """Draw harbor symbols."""
+        for hx, hy, harbor_type in self.harbor_positions:
+            ax.text(hx, hy, f"⚓\n{harbor_type}", ha='center', va='center', 
+                   fontsize=9, fontweight='bold', color='navy',
+                   bbox=dict(boxstyle="round,pad=0.2", facecolor='lightcyan', 
+                           edgecolor='navy', linewidth=1, alpha=0.8))
+    
+    def _generate_classic_intersections(self):
+        """Generate intersection positions based on classic hexagonal board layout."""
+        intersections = {}
+        intersection_id = 0
+        
+        # Classic Catan board hex positions
+        classic_hex_positions = [
+            (0, 2.6), (1.5, 2.6), (3.0, 2.6),           # Top row
+            (-0.75, 1.3), (0.75, 1.3), (2.25, 1.3), (3.75, 1.3),  # Second row
+            (-1.5, 0), (0, 0), (1.5, 0), (3.0, 0), (4.5, 0),      # Middle row
+            (-0.75, -1.3), (0.75, -1.3), (2.25, -1.3), (3.75, -1.3),  # Fourth row
+            (0, -2.6), (1.5, -2.6), (3.0, -2.6)         # Bottom row
+        ]
+        
+        # For each hex, generate 6 corner intersections
+        for hex_x, hex_y in classic_hex_positions:
+            for i in range(6):
+                # Calculate corner positions (vertices of hexagon)
+                angle = i * math.pi / 3
+                corner_x = hex_x + 0.85 * math.cos(angle)
+                corner_y = hex_y + 0.85 * math.sin(angle)
+                
+                # Round to avoid floating point issues
+                corner_x = round(corner_x, 2)
+                corner_y = round(corner_y, 2)
+                
+                # Check if this intersection already exists
+                existing = False
+                for existing_id, (ex, ey) in intersections.items():
+                    if abs(corner_x - ex) < 0.2 and abs(corner_y - ey) < 0.2:
+                        existing = True
+                        break
+                
+                if not existing:
+                    intersections[intersection_id] = (corner_x, corner_y)
+                    intersection_id += 1
+        
+        return intersections
+    
+    def create_intersection_map(self, save_path="intersection_reference.png"):
+        """Create a visual map showing intersection numbers on the classic Catan board."""
+        fig, ax = plt.subplots(1, 1, figsize=(14, 12))
+        
+        # Draw the classic Catan board hexagons using actual board data
+        self._draw_board_hexagons(ax)
+        
+        # Draw intersection numbers at correct positions
+        self._draw_intersection_numbers(ax)
+        
+        # Draw harbors
+        self._draw_harbors(ax)
+        
+        # Add title and instructions
+        ax.set_title("Classic Catan Board - Intersection Reference", 
+                    fontsize=18, fontweight='bold', pad=20)
+        ax.set_aspect('equal')
+        ax.axis('off')
+        
+        # Set limits to show the full board properly
+        ax.set_xlim(-3, 6)
+        ax.set_ylim(-4, 4)
+        
+        # Add instructions
+        instructions = [
+            "HOW TO USE:",
+            "• Blue numbers = intersection IDs (use these in the settlement helper)",
+            "• ⚓ = Harbor locations for trading",
+            "• Colored hexes = resource types"
+        ]
+        
+        instruction_text = "\n".join(instructions)
+        ax.text(0.02, 0.98, instruction_text, transform=ax.transAxes,
+               fontsize=12, verticalalignment='top', 
+               bbox=dict(boxstyle="round,pad=0.4", facecolor='lightblue', alpha=0.8))
+        
+        plt.tight_layout()
+        plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='white')
+        plt.close()
+        
+        return save_path
+    
+    def _draw_board_hexagons(self, ax):
+        """Draw the hexagons using actual board data but with proper Catan layout."""
+        # Resource colors for the classic board
+        resource_colors = {
+            ResourceType.WOOD: '#228B22',      # Forest green
+            ResourceType.BRICK: '#CD853F',     # Sandy brown  
+            ResourceType.SHEEP: '#90EE90',     # Light green
+            ResourceType.WHEAT: '#FFD700',     # Gold
+            ResourceType.ORE: '#708090',       # Slate gray
+            ResourceType.DESERT: '#F4A460'     # Sandy brown
+        }
+        
+        # Classic Catan board hex positions (proper hexagonal layout)
+        classic_positions = [
+            # Top row (3 hexes) - hex IDs 0,1,2
+            (0, 2.6), (1.5, 2.6), (3.0, 2.6),
+            # Second row (4 hexes) - hex IDs 3,4,5,6  
+            (-0.75, 1.3), (0.75, 1.3), (2.25, 1.3), (3.75, 1.3),
+            # Middle row (5 hexes) - hex IDs 7,8,9,10,11
+            (-1.5, 0), (0, 0), (1.5, 0), (3.0, 0), (4.5, 0),
+            # Fourth row (4 hexes) - hex IDs 12,13,14,15
+            (-0.75, -1.3), (0.75, -1.3), (2.25, -1.3), (3.75, -1.3),
+            # Bottom row (3 hexes) - hex IDs 16,17,18
+            (0, -2.6), (1.5, -2.6), (3.0, -2.6)
+        ]
+        
+        # Map hex IDs to their resources and numbers from the actual board
+        hex_data = {}
+        for hex_id, hex_tile in self.board.hexes.items():
+            hex_data[hex_id] = {
+                'resource': hex_tile.resource,
+                'number': hex_tile.number
+            }
+        
+        for hex_id, (center_x, center_y) in enumerate(classic_positions):
+            if hex_id in hex_data:
+                data = hex_data[hex_id]
+                color = resource_colors.get(data['resource'], '#F4A460')
+                
+                # Create hexagon with proper size
+                hex_patch = patches.RegularPolygon(
+                    (center_x, center_y), 6, radius=0.85,
+                    facecolor=color, edgecolor='black', linewidth=2, alpha=0.7
+                )
+                ax.add_patch(hex_patch)
+                
+                # Add number token if not desert
+                if data['resource'] != ResourceType.DESERT and data['number'] > 0:
+                    ax.text(center_x, center_y, str(data['number']),
+                           ha='center', va='center', fontsize=12, fontweight='bold',
+                           bbox=dict(boxstyle="circle,pad=0.25", facecolor='white', 
+                                    edgecolor='red', linewidth=2))
+    
+    def _draw_intersection_numbers(self, ax):
+        """Draw intersection numbers at proper hex corner positions."""
+        # Generate intersections based on the classic hex layout
+        intersections_map = self._generate_classic_intersections()
+        
+        for intersection_id, (x, y) in intersections_map.items():
+            # Only draw if this intersection exists in the actual board
+            if intersection_id < len(self.board.intersections):
+                ax.text(x, y, str(intersection_id),
+                       ha='center', va='center', fontsize=14, fontweight='bold', 
+                       color='white',
+                       bbox=dict(boxstyle="circle,pad=0.3", facecolor='blue', 
+                                edgecolor='darkblue', linewidth=2, alpha=0.9))
+    
+    def _draw_harbors(self, ax):
+        """Draw harbor symbols."""
+        for hx, hy, harbor_type in self.harbor_positions:
+            ax.text(hx, hy, f"⚓\n{harbor_type}", ha='center', va='center', 
+                   fontsize=9, fontweight='bold', color='navy',
+                   bbox=dict(boxstyle="round,pad=0.2", facecolor='lightcyan', 
+                           edgecolor='navy', linewidth=1, alpha=0.8))
+
+def create_intersection_map():
+    """Generate the intersection reference map."""
+    print("🗺️  Generating intersection reference map...")
+    
+    # Create output directory
+    os.makedirs("catan_reference", exist_ok=True)
+    
+    # Generate the reference
+    ref_generator = IntersectionReference()
+    map_path = ref_generator.create_intersection_map("catan_reference/intersection_reference.png")
+    
+    print(f"✅ Intersection reference map saved: {map_path}")
+    print("   Use this map to identify intersection numbers when using the settlement helper!")
+    
+    return map_path
+
+if __name__ == "__main__":
+    create_intersection_map()

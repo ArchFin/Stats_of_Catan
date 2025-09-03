@@ -1,0 +1,29 @@
+Catan Settlement Recommendations (balanced strategy)
+============================================================
+
+Strategy: Prioritizes overall resource production and diversity. Good all-around strategy.
+Board validated: True
+Total vertices analyzed: 54
+Legal placements found: 54
+
+Top Recommendations:
+------------------------------
+#1 - Vertex 6
+    Score: 63.4
+    Why: Strong production: sheep (13.9%), brick (11.1%), wheat (11.1%); Excellent resource diversity; High-probability numbers: 8
+
+#2 - Vertex 14
+    Score: 58.2
+    Why: Strong production: wood (8.3%), sheep (27.8%); Good resource diversity; High-probability numbers: 6, 6
+
+#3 - Vertex 7
+    Score: 56.1
+    Why: Strong production: sheep (13.9%), wheat (11.1%); Excellent resource diversity; High-probability numbers: 8
+
+#4 - Vertex 29
+    Score: 52.7
+    Why: Strong production: brick (19.4%), sheep (13.9%); Good resource diversity; High-probability numbers: 8
+
+#5 - Vertex 10
+    Score: 51.7
+    Why: Strong production: sheep (27.8%), brick (11.1%); Good resource diversity; High-probability numbers: 8, 8

@@ -1,0 +1,39 @@
+{
+  "num_players": 4,
+  "current_player": 0,
+  "turn_number": 0,
+  "is_initial_placement": true,
+  "settlements": {
+    "3": 0,
+    "15": 1,
+    "32": 2,
+    "45": 3
+  },
+  "cities": {},
+  "roads": [
+    [
+      3,
+      7
+    ],
+    [
+      15,
+      20
+    ]
+  ],
+  "player_roads": {
+    "0": [
+      [
+        3,
+        7
+      ]
+    ],
+    "1": [
+      [
+        15,
+        20
+      ]
+    ],
+    "2": [],
+    "3": []
+  }
+}

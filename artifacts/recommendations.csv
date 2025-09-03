@@ -1,0 +1,6 @@
+rank,vertex_id,total_score,production_score,balance_score,road_score,dev_score,robber_penalty,blocking_score,justification
+1,6,63.39,36.11,20.00,11.56,7.50,5.00,0.00,"Strong production: sheep (13.9%), brick (11.1%), wheat (11.1%); Excellent resource diversity; High-probability numbers: 8"
+2,14,58.19,36.11,10.00,10.17,8.33,10.00,0.00,"Strong production: wood (8.3%), sheep (27.8%); Good resource diversity; High-probability numbers: 6, 6"
+3,7,56.06,30.56,20.00,6.00,9.17,5.00,0.00,"Strong production: sheep (13.9%), wheat (11.1%); Excellent resource diversity; High-probability numbers: 8"
+4,29,52.69,33.33,10.00,15.72,4.17,5.00,0.00,"Strong production: brick (19.4%), sheep (13.9%); Good resource diversity; High-probability numbers: 8"
+5,10,51.67,38.89,10.00,11.56,8.33,10.00,0.00,"Strong production: sheep (27.8%), brick (11.1%); Good resource diversity; High-probability numbers: 8, 8"
