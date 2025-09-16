@@ -1,0 +1,311 @@
+"""
+Enhanced Game State Management
+==============================
+
+Handles occupied vertices, roads, player state, and turn order information.
+Includes settlement legality validation and state persistence.
+"""
+
+from typing import Dict, List, Set, Optional, Tuple
+from dataclasses import dataclass, field
+from pathlib import Path
+import json
+
+from .vertices import VertexManager
+
+
+@dataclass
+class Player:
+    """Player information with settlements and roads."""
+    id: str
+    settlements: List[int] = field(default_factory=list)
+    cities: List[int] = field(default_factory=list)
+    roads: List[Tuple[int, int]] = field(default_factory=list)
+
+
+@dataclass
+class GameState:
+    """Complete game state with players, turn order, and legality validation."""
+    players: Dict[str, Player] = field(default_factory=dict)
+    turn_order: List[str] = field(default_factory=list)
+    robber_position: Optional[Tuple[int, int]] = None  # (q, r) hex coordinates
+    
+    def __post_init__(self):
+        """Ensure all players in turn_order exist in players dict."""
+        for player_id in self.turn_order:
+            if player_id not in self.players:
+                self.players[player_id] = Player(id=player_id)
+    
+    def add_player(self, player_id: str) -> None:
+        """Add a new player to the game."""
+        if player_id not in self.players:
+            self.players[player_id] = Player(id=player_id)
+            if player_id not in self.turn_order:
+                self.turn_order.append(player_id)
+    
+    def place_settlement(self, player_id: str, vertex_id: int, vertex_manager: VertexManager) -> bool:
+        """
+        Place a settlement for a player with legality validation.
+        
+        Args:
+            player_id: ID of the player
+            vertex_id: Vertex to place settlement on
+            vertex_manager: Vertex manager for validation
+            
+        Returns:
+            True if placement was successful, False if illegal
+        """
+        if not self.is_legal_settlement_placement(vertex_id, vertex_manager):
+            return False
+            
+        if player_id not in self.players:
+            self.add_player(player_id)
+            
+        self.players[player_id].settlements.append(vertex_id)
+        return True
+    
+    def place_city(self, player_id: str, vertex_id: int) -> bool:
+        """
+        Upgrade a settlement to a city.
+        
+        Args:
+            player_id: ID of the player
+            vertex_id: Vertex with existing settlement
+            
+        Returns:
+            True if upgrade was successful, False if no settlement exists
+        """
+        if player_id not in self.players:
+            return False
+            
+        if vertex_id not in self.players[player_id].settlements:
+            return False
+            
+        self.players[player_id].settlements.remove(vertex_id)
+        self.players[player_id].cities.append(vertex_id)
+        return True
+    
+    def is_legal_settlement_placement(self, vertex_id: int, vertex_manager: VertexManager) -> bool:
+        """
+        Check if a settlement placement is legal.
+        
+        Args:
+            vertex_id: Vertex to check
+            vertex_manager: Vertex manager for neighbor lookup
+            
+        Returns:
+            True if placement is legal, False otherwise
+        """
+        # Check if vertex is already occupied
+        if self.is_vertex_occupied(vertex_id):
+            return False
+            
+        # Check distance rule (no adjacent settlements)
+        occupied_vertices = self.get_all_occupied_vertices()
+        if vertex_id in vertex_manager.vertices:
+            vertex = vertex_manager.vertices[vertex_id]
+            for neighbor_id in vertex.neighbors:
+                if neighbor_id in occupied_vertices:
+                    return False
+                    
+        return True
+    
+    def is_vertex_occupied(self, vertex_id: int) -> bool:
+        """Check if a vertex is occupied by any player."""
+        for player in self.players.values():
+            if vertex_id in player.settlements or vertex_id in player.cities:
+                return True
+        return False
+    
+    def get_all_occupied_vertices(self) -> Set[int]:
+        """Get all vertices occupied by settlements or cities."""
+        occupied = set()
+        for player in self.players.values():
+            occupied.update(player.settlements)
+            occupied.update(player.cities)
+        return occupied
+    
+    def get_legal_placement_vertices(self, vertex_manager: VertexManager) -> Set[int]:
+        """
+        Get all vertices where settlements can be legally placed.
+        
+        Args:
+            vertex_manager: Vertex manager for validation
+            
+        Returns:
+            Set of legal vertex IDs
+        """
+        legal_vertices = set()
+        for vertex_id in vertex_manager.vertices:
+            if self.is_legal_settlement_placement(vertex_id, vertex_manager):
+                legal_vertices.add(vertex_id)
+        return legal_vertices
+    
+    def get_blocked_vertices(self, vertex_manager: VertexManager) -> Dict[int, str]:
+        """
+        Get vertices that are blocked and the reason why.
+        
+        Args:
+            vertex_manager: Vertex manager for validation
+            
+        Returns:
+            Dictionary mapping vertex_id to blocking reason
+        """
+        blocked = {}
+        occupied_vertices = self.get_all_occupied_vertices()
+        
+        for vertex_id in vertex_manager.vertices:
+            if vertex_id in occupied_vertices:
+                blocked[vertex_id] = "occupied"
+            elif not self.is_legal_settlement_placement(vertex_id, vertex_manager):
+                # Find which settlement is blocking this vertex
+                vertex = vertex_manager.vertices[vertex_id]
+                for neighbor_id in vertex.neighbors:
+                    if neighbor_id in occupied_vertices:
+                        blocking_player = None
+                        for player_id, player in self.players.items():
+                            if neighbor_id in player.settlements or neighbor_id in player.cities:
+                                blocking_player = player_id
+                                break
+                        blocked[vertex_id] = f"adjacent_to_settlement_player_{blocking_player}_vertex_{neighbor_id}"
+                        break
+                        
+        return blocked
+    
+    def get_player_turn_position(self, player_id: str) -> Optional[int]:
+        """
+        Get the turn position of a player (0-indexed).
+        
+        Args:
+            player_id: ID of the player
+            
+        Returns:
+            Turn position (0 = first, 1 = second, etc.) or None if not found
+        """
+        try:
+            return self.turn_order.index(player_id)
+        except ValueError:
+            return None
+    
+    def is_early_player(self, player_id: str) -> bool:
+        """Check if player picks early in turn order (first half)."""
+        position = self.get_player_turn_position(player_id)
+        if position is None:
+            return False
+        return position < len(self.turn_order) / 2
+    
+    def is_late_player(self, player_id: str) -> bool:
+        """Check if player picks late in turn order (second half)."""
+        position = self.get_player_turn_position(player_id)
+        if position is None:
+            return False
+        return position >= len(self.turn_order) / 2
+    
+    def to_dict(self) -> Dict:
+        """Convert game state to dictionary for JSON serialization."""
+        return {
+            "players": [
+                {
+                    "id": player.id,
+                    "settlements": player.settlements,
+                    "cities": player.cities,
+                    "roads": player.roads
+                }
+                for player in self.players.values()
+            ],
+            "turn_order": self.turn_order,
+            "robber_position": self.robber_position
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'GameState':
+        """Create game state from dictionary (JSON deserialization)."""
+        state = cls()
+        
+        # Load players
+        for player_data in data.get("players", []):
+            player = Player(
+                id=player_data["id"],
+                settlements=player_data.get("settlements", []),
+                cities=player_data.get("cities", []),
+                roads=[tuple(road) for road in player_data.get("roads", [])]
+            )
+            state.players[player.id] = player
+        
+        # Load turn order
+        state.turn_order = data.get("turn_order", [])
+        
+        # Load robber position
+        robber_pos = data.get("robber_position")
+        if robber_pos:
+            state.robber_position = tuple(robber_pos)
+            
+        return state
+    
+    def save_to_file(self, file_path: Path) -> None:
+        """Save game state to JSON file."""
+        with open(file_path, 'w') as f:
+            json.dump(self.to_dict(), f, indent=2)
+    
+    @classmethod
+    def load_from_file(cls, file_path: Path) -> 'GameState':
+        """Load game state from JSON file."""
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+        return cls.from_dict(data)
+    
+    def validate_state(self, vertex_manager: VertexManager) -> List[str]:
+        """
+        Validate the game state for consistency and legality.
+        
+        Args:
+            vertex_manager: Vertex manager for validation
+            
+        Returns:
+            List of validation errors (empty if valid)
+        """
+        errors = []
+        
+        # Check that all vertices exist
+        for player in self.players.values():
+            for vertex_id in player.settlements + player.cities:
+                if vertex_id not in vertex_manager.vertices:
+                    errors.append(f"Player {player.id} has settlement/city on non-existent vertex {vertex_id}")
+        
+        # Check settlement distance rule
+        occupied_vertices = self.get_all_occupied_vertices()
+        for vertex_id in occupied_vertices:
+            if vertex_id in vertex_manager.vertices:
+                vertex = vertex_manager.vertices[vertex_id]
+                for neighbor_id in vertex.neighbors:
+                    if neighbor_id in occupied_vertices and neighbor_id != vertex_id:
+                        errors.append(f"Vertices {vertex_id} and {neighbor_id} are adjacent but both occupied")
+        
+        # Check turn order consistency
+        for player_id in self.turn_order:
+            if player_id not in self.players:
+                errors.append(f"Player {player_id} in turn order but not in players list")
+        
+        return errors
+    
+    def get_state_summary(self) -> Dict:
+        """Get a summary of the current game state."""
+        total_settlements = sum(len(p.settlements) for p in self.players.values())
+        total_cities = sum(len(p.cities) for p in self.players.values())
+        total_roads = sum(len(p.roads) for p in self.players.values())
+        
+        return {
+            "total_players": len(self.players),
+            "total_settlements": total_settlements,
+            "total_cities": total_cities,
+            "total_roads": total_roads,
+            "turn_order": self.turn_order,
+            "players": {
+                pid: {
+                    "settlements": len(p.settlements),
+                    "cities": len(p.cities),
+                    "roads": len(p.roads)
+                }
+                for pid, p in self.players.items()
+            }
+        }

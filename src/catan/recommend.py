@@ -52,7 +52,7 @@ class SettlementRecommender:
         self.scorer = scorer
     
     def recommend_settlements(self, game_state: GameState, strategy: str = 'balanced',
-                            player_id: int = 0, top_k: int = 10) -> List[RecommendationResult]:
+                            player_id: int = 0, top_k: int = 10, settlement_number: int = None) -> List[RecommendationResult]:
         """
         Generate top-K settlement recommendations.
         
@@ -61,17 +61,22 @@ class SettlementRecommender:
             strategy: Strategy preference
             player_id: ID of the player making the placement
             top_k: Number of recommendations to return
+            settlement_number: Which settlement number this is for the player (1st, 2nd, etc.)
         
         Returns:
             List of RecommendationResult objects, ranked by score
         """
+        # Auto-detect settlement number if not provided
+        if settlement_number is None:
+            settlement_number = game_state.get_settlement_count(player_id) + 1
+        
         # Get scored vertices
-        scored_vertices = self.scorer.rank_vertices(game_state, strategy, player_id, top_k)
+        scored_vertices = self.scorer.rank_vertices(game_state, strategy, player_id, top_k, settlement_number)
         
         # Convert to recommendation results with justifications
         results = []
         for rank, score_breakdown in enumerate(scored_vertices, 1):
-            justification = self._generate_justification(score_breakdown, strategy)
+            justification = self._generate_justification(score_breakdown, strategy, settlement_number)
             
             result = RecommendationResult(
                 vertex_id=score_breakdown.vertex_id,
@@ -85,7 +90,7 @@ class SettlementRecommender:
         return results
     
     def analyze_placement(self, vertex_id: int, game_state: GameState, 
-                         strategy: str = 'balanced') -> RecommendationResult:
+                         strategy: str = 'balanced', player_id: int = 0, settlement_number: int = None) -> RecommendationResult:
         """
         Analyze a specific vertex placement.
         
@@ -93,12 +98,18 @@ class SettlementRecommender:
             vertex_id: ID of the vertex to analyze
             game_state: Current game state
             strategy: Strategy preference
+            player_id: ID of the player making the placement
+            settlement_number: Which settlement number this is for the player
         
         Returns:
             RecommendationResult for the specific vertex
         """
-        score_breakdown = self.scorer.score_vertex(vertex_id, game_state, strategy)
-        justification = self._generate_justification(score_breakdown, strategy)
+        # Auto-detect settlement number if not provided
+        if settlement_number is None:
+            settlement_number = game_state.get_settlement_count(player_id) + 1
+        
+        score_breakdown = self.scorer.score_vertex(vertex_id, game_state, strategy, settlement_number)
+        justification = self._generate_justification(score_breakdown, strategy, settlement_number)
         
         return RecommendationResult(
             vertex_id=vertex_id,
@@ -108,23 +119,32 @@ class SettlementRecommender:
             justification=justification
         )
     
-    def compare_strategies_for_vertex(self, vertex_id: int, game_state: GameState) -> Dict[str, RecommendationResult]:
+    def compare_strategies_for_vertex(self, vertex_id: int, game_state: GameState, 
+                                   player_id: int = 0, settlement_number: int = None) -> Dict[str, RecommendationResult]:
         """Compare how different strategies evaluate the same vertex."""
         strategies = ['balanced', 'road_focused', 'dev_focused', 'city_focused']
         results = {}
         
         for strategy in strategies:
-            results[strategy] = self.analyze_placement(vertex_id, game_state, strategy)
+            results[strategy] = self.analyze_placement(vertex_id, game_state, strategy, player_id, settlement_number)
         
         return results
     
-    def _generate_justification(self, score_breakdown: ScoreBreakdown, strategy: str) -> str:
+    def _generate_justification(self, score_breakdown: ScoreBreakdown, strategy: str, settlement_number: int = 1) -> str:
         """Generate human-readable justification for a recommendation."""
         vertex_info = self.vertex_manager.get_vertex_info(score_breakdown.vertex_id)
         if not vertex_info:
             return "Invalid vertex"
         
         justifications = []
+        
+        # Settlement-specific considerations
+        if settlement_number == 1:
+            justifications.append("1st settlement: Focus on production and diversity")
+        elif settlement_number == 2:
+            justifications.append("2nd settlement: Complement existing resources")
+        elif settlement_number > 2:
+            justifications.append(f"{settlement_number}th settlement: Advanced strategy")
         
         # Production analysis
         if score_breakdown.production_score > 15:

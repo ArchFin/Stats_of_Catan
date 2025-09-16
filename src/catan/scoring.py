@@ -10,12 +10,6 @@ development focus, robber penalty, blocking strategy, and harbor access.
 import math
 from typing import Dict, List, Set, Tuple, Optional
 from collections import defaultdict, Counter
-
-from .board import CatanBoard, ResourceType
-from .vertices import VertexManager
-
-import math
-from typing import Dict, List, Set, Tuple, Optional
 from dataclasses import dataclass
 
 from .board import CatanBoard, ResourceType
@@ -113,14 +107,16 @@ class SettlementScorer:
         self.weights.update(weights)
     
     def score_vertex(self, vertex_id: int, game_state: GameState, 
-                    strategy: str = 'balanced') -> ScoreBreakdown:
+                    player_id: int, strategy: str = 'balanced', settlement_number: int = None) -> ScoreBreakdown:
         """
         Score a vertex for settlement placement.
         
         Args:
             vertex_id: ID of the vertex to score
             game_state: Current game state
+            player_id: ID of the player considering this placement
             strategy: Strategy preference ('balanced', 'road_focused', 'dev_focused', 'city_focused')
+            settlement_number: Which settlement (1, 2, etc.) - auto-detected if None
         
         Returns:
             ScoreBreakdown with detailed scoring information
@@ -128,9 +124,20 @@ class SettlementScorer:
         if vertex_id not in self.vertex_manager.vertices:
             return ScoreBreakdown(vertex_id, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         
+        # Check if settlement placement is legal
+        if not game_state.is_legal_settlement_placement(vertex_id, self.vertex_manager):
+            return ScoreBreakdown(vertex_id, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        
+        # Auto-detect settlement number if not provided
+        if settlement_number is None:
+            settlement_number = game_state.get_next_settlement_number(player_id)
+        
         vertex_info = self.vertex_manager.get_vertex_info(vertex_id)
         if not vertex_info:
             return ScoreBreakdown(vertex_id, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        
+        # Get player's existing settlements for synergy analysis
+        existing_settlements = game_state.get_player_settlements(player_id)
         
         # Calculate individual score components
         production_score = self._calculate_production_score(vertex_info, strategy)
@@ -141,6 +148,13 @@ class SettlementScorer:
         blocking_score = self._calculate_blocking_score(vertex_id, game_state)
         harbor_score = self._calculate_harbor_score(vertex_id, strategy)
         
+        # Calculate settlement synergy (for 2nd+ settlements)
+        synergy_score = self._calculate_settlement_synergy(vertex_id, existing_settlements, settlement_number)
+        
+        # Apply settlement-specific and turn order biases
+        turn_order_multiplier = self._calculate_turn_order_bias(player_id, game_state)
+        settlement_multiplier = self._calculate_settlement_number_bias(settlement_number, strategy)
+        
         # Combine scores with weights
         total_score = (
             self.weights['production'] * production_score +
@@ -149,8 +163,9 @@ class SettlementScorer:
             self.weights['dev'] * dev_score +
             self.weights['robber'] * robber_penalty +
             self.weights['blocking'] * blocking_score +
-            self.weights['harbor'] * harbor_score
-        )
+            self.weights['harbor'] * harbor_score +
+            synergy_score  # Synergy is already weighted internally
+        ) * turn_order_multiplier * settlement_multiplier
         
         return ScoreBreakdown(
             vertex_id=vertex_id,
@@ -262,7 +277,7 @@ class SettlementScorer:
         return blocking_score
     
     def rank_vertices(self, game_state: GameState, strategy: str = 'balanced',
-                     player_id: int = 0, top_k: int = 10) -> List[ScoreBreakdown]:
+                     player_id: int = 0, top_k: int = 10, settlement_number: int = None) -> List[ScoreBreakdown]:
         """
         Rank all legal vertices for settlement placement.
         
@@ -271,6 +286,7 @@ class SettlementScorer:
             strategy: Strategy preference
             player_id: ID of the player making the placement
             top_k: Number of top candidates to return
+            settlement_number: Which settlement number this is for the player (1st, 2nd, etc.)
         
         Returns:
             List of ScoreBreakdown objects, sorted by score (highest first)
@@ -279,7 +295,7 @@ class SettlementScorer:
         
         scores = []
         for vertex_id in legal_vertices:
-            score = self.score_vertex(vertex_id, game_state, strategy)
+            score = self.score_vertex(vertex_id, game_state, strategy, settlement_number)
             scores.append(score)
         
         # Sort by total score (descending)
@@ -328,12 +344,149 @@ class SettlementScorer:
         }
         return explanations.get(strategy, "Unknown strategy")
     
-    def compare_strategies(self, vertex_id: int, game_state: GameState) -> Dict[str, ScoreBreakdown]:
+    def compare_strategies(self, vertex_id: int, game_state: GameState, player_id: str) -> Dict[str, ScoreBreakdown]:
         """Compare how different strategies score the same vertex."""
         strategies = ['balanced', 'road_focused', 'dev_focused', 'city_focused']
         
         results = {}
         for strategy in strategies:
-            results[strategy] = self.score_vertex(vertex_id, game_state, strategy)
+            results[strategy] = self.score_vertex(vertex_id, game_state, player_id, strategy)
         
         return results
+    
+    def _calculate_settlement_synergy(self, vertex_id: int, existing_settlements: List[int], settlement_number: int) -> float:
+        """
+        Calculate how well this settlement complements existing ones.
+        
+        Args:
+            vertex_id: The vertex being considered
+            existing_settlements: List of player's existing settlement vertices
+            settlement_number: Which settlement number this would be
+            
+        Returns:
+            Synergy bonus score
+        """
+        if not existing_settlements or settlement_number == 1:
+            return 0.0
+        
+        synergy_score = 0.0
+        vertex_info = self.vertex_manager.get_vertex_info(vertex_id)
+        
+        if not vertex_info:
+            return 0.0
+        
+        # Get new vertex resources and numbers
+        new_resources = set(vertex_info['resources'].keys())
+        new_numbers = set(vertex_info['numbers'])
+        
+        # Aggregate existing resources and numbers
+        existing_resources = set()
+        existing_numbers = set()
+        
+        for existing_vertex in existing_settlements:
+            existing_info = self.vertex_manager.get_vertex_info(existing_vertex)
+            if existing_info:
+                existing_resources.update(existing_info['resources'].keys())
+                existing_numbers.update(existing_info['numbers'])
+        
+        # Resource diversification bonus
+        unique_resources = new_resources - existing_resources
+        synergy_score += len(unique_resources) * 3.0  # 3 points per new resource type
+        
+        # Number diversification bonus
+        unique_numbers = new_numbers - existing_numbers
+        synergy_score += len(unique_numbers) * 2.0  # 2 points per new number
+        
+        # Resource strengthening bonus (doubling up on good resources)
+        overlapping_resources = new_resources & existing_resources
+        for resource in overlapping_resources:
+            if resource in ['wheat', 'ore']:  # High-value resources for cities/dev cards
+                synergy_score += 1.5
+            elif resource in ['wood', 'brick']:  # Good for roads
+                synergy_score += 1.0
+        
+        # Avoid over-concentration penalty
+        if len(existing_settlements) >= 2:
+            # Check if this creates too much concentration in one area
+            distances = []
+            for existing_vertex in existing_settlements:
+                # Simple distance check based on vertex ID difference (approximation)
+                distances.append(abs(vertex_id - existing_vertex))
+            
+            avg_distance = sum(distances) / len(distances)
+            if avg_distance < 5:  # Too clustered
+                synergy_score -= 2.0
+        
+        return synergy_score
+    
+    def _calculate_settlement_number_bias(self, settlement_number: int, strategy: str) -> float:
+        """
+        Calculate scoring bias based on which settlement this is.
+        
+        Args:
+            settlement_number: Which settlement (1, 2, 3, etc.)
+            strategy: The strategy being used
+            
+        Returns:
+            Multiplier for the total score
+        """
+        if settlement_number == 1:
+            # First settlement: emphasize production and balance
+            if strategy == 'balanced':
+                return 1.0  # No bias for balanced strategy
+            elif strategy in ['road_focused', 'dev_focused']:
+                return 0.95  # Slight penalty for specialized strategies on first settlement
+            else:
+                return 1.0
+        
+        elif settlement_number == 2:
+            # Second settlement: can be more specialized
+            if strategy == 'balanced':
+                return 1.05  # Slight bonus for maintaining balance
+            elif strategy in ['road_focused', 'dev_focused', 'city_focused']:
+                return 1.1  # Bonus for specialization on second settlement
+            else:
+                return 1.0
+        
+        else:
+            # 3rd+ settlements: full specialization encouraged
+            return 1.15 if strategy != 'balanced' else 1.05
+    
+    def _calculate_turn_order_bias(self, player_id: int, game_state: GameState) -> float:
+        """
+        Calculate turn order bias for settlement scoring.
+        
+        Early players (pick first) should prioritize:
+        - High-value spots that won't be available later
+        - Resource diversity to avoid being blocked
+        - Blocking key positions from later players
+        
+        Late players (pick last) should prioritize:
+        - Spots that complement their existing placements
+        - Specialized strategies since they can see what's taken
+        - Road building potential for future expansion
+        
+        Args:
+            player_id: ID of the player
+            game_state: Current game state with turn order
+        
+        Returns:
+            Multiplier for settlement scores (0.8-1.2)
+        """
+        if not game_state.turn_order or player_id not in game_state.turn_order:
+            return 1.0  # No bias if turn order unknown
+        
+        player_position = game_state.turn_order.index(player_id)
+        total_players = len(game_state.turn_order)
+        
+        # Calculate relative position (0.0 = first, 1.0 = last)
+        relative_position = player_position / (total_players - 1) if total_players > 1 else 0.0
+        
+        # Early players get slight bonus for high-value spots
+        # Late players get slight bonus for specialized/road-building potential
+        if relative_position < 0.33:  # Early players (first third)
+            return 1.1  # 10% bonus to emphasize securing best spots
+        elif relative_position > 0.67:  # Late players (last third)
+            return 1.05  # 5% bonus to emphasize strategic adaptation
+        else:  # Middle players
+            return 1.0  # No bias for middle positions

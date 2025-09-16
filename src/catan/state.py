@@ -43,10 +43,17 @@ class GameState:
         self.roads: Set[Tuple[int, int]] = set()  # Set of (vertex1_id, vertex2_id) edges
         self.player_roads: Dict[int, Set[Tuple[int, int]]] = {i: set() for i in range(num_players)}
         
+        # Enhanced settlement tracking
+        self.player_settlements: Dict[int, List[int]] = {i: [] for i in range(num_players)}  # Track each player's settlements in order
+        self.settlement_order: List[Tuple[int, int]] = []  # List of (player_id, vertex_id) in placement order
+        
         # Turn information
         self.current_player: int = 0
         self.turn_number: int = 0
         self.is_initial_placement: bool = True
+        self.turn_order: List[int] = list(range(num_players))  # Default turn order
+        self.current_phase: str = "initial_placement"  # Track game phase
+        self.placement_round: int = 1  # Track which initial placement round (1 or 2)
     
     def add_settlement(self, vertex_id: int, player_id: int) -> bool:
         """
@@ -193,6 +200,88 @@ class GameState:
         """Check if a vertex is occupied by any structure."""
         return vertex_id in self.occupied_vertices
     
+    def is_legal_settlement_placement(self, vertex_id: int, vertex_manager) -> bool:
+        """
+        Check if a settlement placement is legal.
+        
+        Args:
+            vertex_id: Vertex to check
+            vertex_manager: Vertex manager for neighbor lookup
+            
+        Returns:
+            True if placement is legal, False otherwise
+        """
+        # Check if vertex is already occupied
+        if self.is_vertex_occupied(vertex_id):
+            return False
+            
+        # Check distance rule (no adjacent settlements)
+        if vertex_id in vertex_manager.vertices:
+            for neighbor_id in vertex_manager.adjacency.get(vertex_id, set()):
+                if self.is_vertex_occupied(neighbor_id):
+                    return False
+                    
+        return True
+    
+    def place_settlement_enhanced(self, player_id: int, vertex_id: int, settlement_number: int = None) -> bool:
+        """
+        Place a settlement with enhanced tracking.
+        
+        Args:
+            player_id: ID of the player
+            vertex_id: Vertex to place settlement on
+            settlement_number: Which settlement number (auto-detected if None)
+            
+        Returns:
+            True if placement was successful
+        """
+        if not self.add_settlement(vertex_id, player_id):
+            return False
+            
+        # Add to enhanced tracking
+        self.player_settlements[player_id].append(vertex_id)
+        self.settlement_order.append((player_id, vertex_id))
+        
+        # Auto-detect settlement number if not provided
+        if settlement_number is None:
+            settlement_number = len(self.player_settlements[player_id])
+        
+        return True
+    
+    def get_player_settlements(self, player_id: int) -> List[int]:
+        """Get all settlements for a specific player in placement order."""
+        return self.player_settlements.get(player_id, [])
+    
+    def get_settlement_count(self, player_id: int) -> int:
+        """Get number of settlements placed by player."""
+        return len(self.player_settlements.get(player_id, []))
+    
+    def get_next_settlement_number(self, player_id: int) -> int:
+        """Get the settlement number for the next placement by this player."""
+        return self.get_settlement_count(player_id) + 1
+    
+    def is_first_settlement(self, player_id: int) -> bool:
+        """Check if this would be the player's first settlement."""
+        return self.get_settlement_count(player_id) == 0
+    
+    def is_second_settlement(self, player_id: int) -> bool:
+        """Check if this would be the player's second settlement."""
+        return self.get_settlement_count(player_id) == 1
+    
+    def get_settlement_phase_info(self, player_id: int) -> Dict:
+        """Get comprehensive info about current settlement phase for player."""
+        settlement_count = self.get_settlement_count(player_id)
+        
+        return {
+            'settlement_count': settlement_count,
+            'next_settlement_number': settlement_count + 1,
+            'is_first_settlement': settlement_count == 0,
+            'is_second_settlement': settlement_count == 1,
+            'phase': self.current_phase,
+            'placement_round': self.placement_round,
+            'existing_settlements': self.get_player_settlements(player_id)
+        }
+    
     def get_game_summary(self) -> Dict:
         """Get a summary of the current game state."""
         summary = {
@@ -221,7 +310,12 @@ class GameState:
             'settlements': self.settlements,
             'cities': self.cities,
             'roads': list(self.roads),
-            'player_roads': {str(k): list(v) for k, v in self.player_roads.items()}
+            'player_roads': {str(k): list(v) for k, v in self.player_roads.items()},
+            # Enhanced tracking data
+            'player_settlements': {str(k): v for k, v in self.player_settlements.items()},
+            'settlement_order': self.settlement_order,
+            'current_phase': self.current_phase,
+            'placement_round': self.placement_round
         }
     
     @classmethod
@@ -239,4 +333,15 @@ class GameState:
             int(k): set(tuple(road) for road in v) 
             for k, v in data['player_roads'].items()
         }
+        
+        # Load enhanced tracking data if available
+        if 'player_settlements' in data:
+            state.player_settlements = {int(k): v for k, v in data['player_settlements'].items()}
+        if 'settlement_order' in data:
+            state.settlement_order = data['settlement_order']
+        if 'current_phase' in data:
+            state.current_phase = data['current_phase']
+        if 'placement_round' in data:
+            state.placement_round = data['placement_round']
+        
         return state

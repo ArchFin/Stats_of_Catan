@@ -372,13 +372,14 @@ class InteractiveCatanSetup:
         
         print()
     
-    def get_recommendations(self, strategy: str = "balanced", top_k: int = 5):
+    def get_recommendations(self, strategy: str = "balanced", top_k: int = 5, settlement_number: int = 1):
         """Get settlement recommendations."""
         if not self.board or not self.vertex_manager:
             print("❌ Board analysis required first")
             return
             
         print(f"🎯 GETTING TOP {top_k} RECOMMENDATIONS ({strategy} strategy)")
+        print(f"   Settlement #{settlement_number} placement")
         print("=" * 50)
         
         # Create scorer and recommender
@@ -388,7 +389,7 @@ class InteractiveCatanSetup:
         
         # Get recommendations
         recommendations = recommender.recommend_settlements(
-            game_state, strategy=strategy, top_k=top_k
+            game_state, strategy=strategy, top_k=top_k, settlement_number=settlement_number
         )
         
         print(f"🏆 TOP {len(recommendations)} SETTLEMENTS:")
@@ -400,12 +401,66 @@ class InteractiveCatanSetup:
             print(f"    {rec.justification}")
             
             # Show harbor info if applicable
-            if self.board.is_harbor_vertex(rec.vertex_id):
-                harbor = self.board.get_harbor_at_vertex(rec.vertex_id)
+            if self.board.harbors.is_harbor_vertex(rec.vertex_id):
+                harbor = self.board.harbors.get_harbor_at_vertex(rec.vertex_id)
                 print(f"    ⚓ Harbor: {harbor.type.value}")
             print()
         
         return recommendations
+    
+    def demonstrate_settlement_progression(self, strategy: str = "balanced", player_id: int = 0):
+        """Demonstrate how recommendations change as settlements are placed."""
+        if not self.board or not self.vertex_manager:
+            print("❌ Board analysis required first")
+            return
+            
+        print("🏆 SETTLEMENT PROGRESSION DEMONSTRATION")
+        print("=" * 60)
+        print("See how recommendations change with each settlement placement!")
+        print()
+        
+        # Create scorer and recommender
+        scorer = SettlementScorer(self.board, self.vertex_manager)
+        recommender = SettlementRecommender(self.board, self.vertex_manager, scorer)
+        game_state = GameState()
+        
+        # Get initial recommendations for 1st settlement
+        print("🥇 FIRST SETTLEMENT RECOMMENDATIONS:")
+        print("-" * 40)
+        first_recs = recommender.recommend_settlements(
+            game_state, strategy=strategy, player_id=player_id, top_k=3, settlement_number=1
+        )
+        
+        for i, rec in enumerate(first_recs, 1):
+            print(f"#{i} | Vertex {rec.vertex_id:2d} | Score: {rec.score:5.1f}")
+            print(f"    {rec.justification}")
+        
+        # Simulate placing the top recommendation
+        if first_recs:
+            chosen_first = first_recs[0].vertex_id
+            game_state.place_settlement_enhanced(player_id, chosen_first)
+            print(f"\n✅ Placed first settlement at vertex {chosen_first}")
+        
+        print(f"\n🥈 SECOND SETTLEMENT RECOMMENDATIONS:")
+        print("   (Note how synergy with first settlement affects scores)")
+        print("-" * 40)
+        
+        second_recs = recommender.recommend_settlements(
+            game_state, strategy=strategy, player_id=player_id, top_k=3, settlement_number=2
+        )
+        
+        for i, rec in enumerate(second_recs, 1):
+            print(f"#{i} | Vertex {rec.vertex_id:2d} | Score: {rec.score:5.1f}")
+            print(f"    {rec.justification}")
+        
+        # Show phase info
+        phase_info = game_state.get_settlement_phase_info(player_id)
+        print(f"\n📊 GAME STATE:")
+        print(f"   Player {player_id} settlements: {len(phase_info['existing_settlements'])}")
+        print(f"   Current phase: {phase_info['phase']}")
+        print(f"   Next settlement would be #{phase_info['next_settlement_number']}")
+        
+        return first_recs, second_recs
     
     def generate_artifacts(self, output_dir: str = "interactive_output"):
         """Generate visualization and data files."""
@@ -466,11 +521,12 @@ class InteractiveCatanSetup:
             print("4. Use preset board")
             print("5. Analyze current board")
             print("6. Get recommendations")
-            print("7. Generate artifacts")
-            print("8. Exit")
+            print("7. Settlement progression demo")
+            print("8. Generate artifacts")
+            print("9. Exit")
             print()
             
-            choice = input("Select option (1-8): ").strip()
+            choice = input("Select option (1-9): ").strip()
             print()
             
             if choice == "1":
@@ -501,17 +557,38 @@ class InteractiveCatanSetup:
                     top_k = int(input("Number of recommendations (5): ").strip() or "5")
                 except ValueError:
                     top_k = 5
-                self.get_recommendations(strategy, top_k)
+                
+                try:
+                    settlement_num = int(input("Settlement number (1 for first, 2 for second, etc.) [1]: ").strip() or "1")
+                except ValueError:
+                    settlement_num = 1
+                
+                self.get_recommendations(strategy, top_k, settlement_num)
             elif choice == "7":
+                print("🚀 SETTLEMENT PROGRESSION DEMONSTRATION")
+                print("This shows how recommendations change from 1st to 2nd settlement!")
+                print()
+                
+                strategy = input("Strategy (balanced/road_focused/dev_focused/city_focused) [balanced]: ").strip()
+                if not strategy:
+                    strategy = "balanced"
+                
+                try:
+                    player_id = int(input("Player ID (0-3) [0]: ").strip() or "0")
+                except ValueError:
+                    player_id = 0
+                
+                self.demonstrate_settlement_progression(strategy, player_id)
+            elif choice == "8":
                 output_dir = input("Output directory (interactive_output): ").strip()
                 if not output_dir:
                     output_dir = "interactive_output"
                 self.generate_artifacts(output_dir)
-            elif choice == "8":
+            elif choice == "9":
                 print("👋 Thanks for using Catan Board Setup!")
                 break
             else:
-                print("❌ Invalid choice. Please select 1-8.")
+                print("❌ Invalid choice. Please select 1-9.")
             
             print()
 

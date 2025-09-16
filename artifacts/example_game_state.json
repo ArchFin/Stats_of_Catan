@@ -1,0 +1,21 @@
+{
+  "players": {
+    "alice": {
+      "settlements": [16, 25],
+      "cities": [],
+      "roads": [[16, 8], [25, 33]]
+    },
+    "bob": {
+      "settlements": [42, 51],
+      "cities": [42],
+      "roads": [[42, 34], [51, 43]]
+    },
+    "charlie": {
+      "settlements": [7, 18],
+      "cities": [],
+      "roads": [[7, 15], [18, 10]]
+    }
+  },
+  "turn_order": ["alice", "bob", "charlie"],
+  "robber_position": 12
+}
